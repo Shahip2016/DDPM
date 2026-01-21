@@ -1,4 +1,5 @@
 import os
+import copy
 import torch
 import torch.nn as nn
 from torch.cuda.amp import autocast, GradScaler
@@ -25,6 +26,8 @@ def train(args):
     logger = SummaryWriter(os.path.join("runs", args.run_name))
     scaler = GradScaler()
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+    ema = EMA(0.995)
+    ema_model = copy.deepcopy(model).eval().requires_grad_(False)
     l = len(dataloader)
 
     for epoch in range(args.epochs):
@@ -45,15 +48,17 @@ def train(args):
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             scaler.step(optimizer)
             scaler.update()
+            ema.step_ema(ema_model, model)
 
             pbar.set_postfix(MSE=loss.item())
             logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
         
         scheduler.step()
 
-        sampled_images = diffusion.sample(model, n=images.shape[0])
+        sampled_images = diffusion.sample(ema_model, n=images.shape[0])
         save_images(sampled_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
         torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
+        torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
 
 
 def launch():
