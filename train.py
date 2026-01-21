@@ -1,6 +1,7 @@
 import os
 import torch
 import torch.nn as nn
+from torch.cuda.amp import autocast, GradScaler
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 from torch import optim
@@ -22,6 +23,7 @@ def train(args):
     mse = nn.MSELoss()
     diffusion = Diffusion(img_size=args.image_size, device=device)
     logger = SummaryWriter(os.path.join("runs", args.run_name))
+    scaler = GradScaler()
     l = len(dataloader)
 
     for epoch in range(args.epochs):
@@ -31,12 +33,15 @@ def train(args):
             images = images.to(device)
             t = diffusion.sample_timesteps(images.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images, t)
-            predicted_noise = model(x_t, t)
-            loss = mse(noise, predicted_noise)
+            
+            with autocast():
+                predicted_noise = model(x_t, t)
+                loss = mse(noise, predicted_noise)
 
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
             pbar.set_postfix(MSE=loss.item())
             logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
