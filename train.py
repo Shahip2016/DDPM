@@ -56,6 +56,7 @@ def launch():
     parser.add_argument('--dataset_path', type=str, default="data")
     parser.add_argument('--device', type=str, default="cuda" if torch.cuda.is_available() else "cpu") # Use CUDA if available, else CPU
     parser.add_argument('--lr', type=float, default=3e-4)
+    parser.add_argument('--num_workers', type=int, default=2)
     args = parser.parse_args()
     train(args)
 
